@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 100%; margin: 0; padding: 0 }
+      #map-canvas { height: 90% }
+	  .tooltip {
+	  		background-color: gray;
+			position: absolute;
+			z-index: 1020;
+			display: block;
+			padding: 5px;
+			font-size: 14px;
+			visibility: visible;
+			margin-top: -2px;
+			bottom:120%;
+			margin-left: -574%;
+			border-radius: 8px;
+		}
+
+		.tooltip .tooltip-arrow {
+			bottom: 0;
+			left: 50%;
+			margin-left: -5px;
+			border-top: 5px solid #000000;
+			border-right: 5px solid transparent;
+			border-left: 5px solid transparent;
+			position: absolute;
+			width: 0;
+			height: 0;
+		}
+
+		.tooltip-inner {
+			width: 240px;
+			max-width: 250px;
+			padding: 3px 8px;
+			text-decoration: none;
+			background-color: #ffffff;
+			-webkit-border-radius: 4px;
+			   -moz-border-radius: 4px;
+					border-radius: 4px;
+		}
+    </style>
+	<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.2/themes/smoothness/jquery-ui.css" />
+	<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+	<script src="http://code.jquery.com/ui/1.10.2/jquery-ui.js"></script>
+	<script type="text/javascript" src="./suncalc.js"></script>
+	<script type="text/javascript" src="./mooncalc.js"></script>
+    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDDvS622ZaMp7ZQ0UDOhQs91OIoMW99Q2g&libraries=weather&sensor=true"></script>
+	<script type="text/javascript" src="./raphael-min.js"></script>
+	<script type="text/javascript" src="./html2canvas.js"></script>
+	<script type="text/javascript" src="./canvas2image.js"></script>
+    <script type="text/javascript">
+	//bien toan cuc dung cho ca chuong trinh
+
+		//Hien thi ban do//
+		var map,marker,takePhotoPos,takePhotoLine;
+		function initialize() {
+		
+        var mapOptions = {
+          center: new google.maps.LatLng(21.036, 105.842),
+          zoom: 5,
+          mapTypeId: google.maps.MapTypeId.ROADMAP  
+        };
+        map = new google.maps.Map(document.getElementById("map-canvas"),
+            mapOptions);
+     	
+		marker=new google.maps.Marker({
+		  position:map.getCenter(),
+		  draggable:true, 
+		  });
+		marker.setMap(map);
+		 
+		takePhotoPos=new google.maps.Marker({
+		  position:map.getCenter(),
+		  draggable:true,
+		  icon:'camera.png'
+		  });
+		takePhotoPos.setMap(map);
+		takePhotoPos.setVisible(false);
+		
+		google.maps.event.addListener(marker, 'drag', function (event) {
+			takePhotoLine.setPath([takePhotoPos.getPosition(),marker.getPosition()])
+			console.log(current);
+			if (!sunInfoOverlay) {
+				sunInfoOverlay = new SuncalcOverlay(map, marker.getPosition(), current);
+			} else {
+				sunInfoOverlay.update(marker.getPosition(), current);
+			}			
+		});
+		
+		var takePhotoPath = [
+          takePhotoPos.getPosition(),
+          marker.getPosition()
+        ];	
+        takePhotoLine = new google.maps.Polyline({
+          path: takePhotoPath,
+          strokeColor: '#00ff00',
+          strokeOpacity: 0.7,
+          strokeWeight: 3,
+        });
+        takePhotoLine.setMap(map);
+        takePhotoLine.setVisible(false);
+		
+		google.maps.event.addListener(takePhotoPos, 'drag', function (event) {
+			takePhotoLine.setPath([takePhotoPos.getPosition(),marker.getPosition()])
+		});
+		//Ket thuc hien thi ban do//
+
+		//script tinh toan thoi gian+ vi tri mat troi + mat trang
+		var SuncalcOverlay = function(map, position, date) {
+			this.setMap(map);
+			this.update(position, date);
+		};
+		SuncalcOverlay.prototype = new google.maps.OverlayView();
+		$.extend(SuncalcOverlay.prototype, {
+			RADIUS: 270,
+			PADDING: 150,
+			CURVE_TIME_INTERVAL: 1000*60*20,
+			
+			CIRCLE_ATTRS: 			["#000000", 0.5, 1],
+			
+			GREY_PATH_ATTRS: 		["#000000", 0.4, 1],
+			
+			SUNRISE_DIR_ATTRS: 		['#ffcc00', 1, 3],
+			SUNRISE_SECTOR_ATTRS: 	['#ffcc00', 0.15],
+			
+			SUNSET_DIR_ATTRS: 		['#ff3300', 1, 3],
+			SUNSET_SECTOR_ATTRS: 	['#ff3300', 0.12],
+			
+			MOONRISE_DIR_ATTRS: 	['#00ffde', 1, 3],
+			MOONRISE_SECTOR_ATTRS: 	['#00ffde', 0.15],
+			
+			MOONSET_DIR_ATTRS: 		['#003399', 1, 3],
+			MOONSET_SECTOR_ATTRS: 	['#003399', 0.12],
+			
+			SUNLIGHT_FILL_ATTRS:	['#ffd700', 0.2],
+			
+			CURRENT_CURVE_ATTRS: 	['#ffa500', 1, 4],
+			SUN_DIR_ATTRS: 			['#ffa500', 0.9, 3],
+			CURRENT_MOON_CURVE_ATTRS: 	['#0099ff', 1, 4],
+			MOON_DIR_ATTRS: 		['#0099ff', 0.9, 3],
+			
+			EDGE_SUNRISE_DIR_ATTRS: ['#ffd700', 0.9, 1],
+			EDGE_SUNSET_DIR_ATTRS: 	['#ff4500', 0.7, 1],
+
+			update: function(position, date) {
+			
+				if (this._position != position) {
+					this._positionChanged = true;
+					this._position = position;
+				}
+				if (this._date != date) {
+					if (this._date && (this._date.getFullYear() == date.getFullYear()) &&
+							(this._date.getDate() == date.getDate()) &&
+							(this._date.getMonth() == date.getMonth())&&
+							(this._date.getHours() == date.getHours())&&
+							(this._date.getMinutes() == date.getMinutes())) {
+						this._timeChanged = true;
+					} else {
+						this._dayChanged = true;
+					}
+					this._date = date;
+					
+					//get tooltip margin-left base on dateslider position
+					var day = getDateSliderPos(this._date);
+					$("#dateSlider").slider("option", "value", day);
+					tooltipMarginLeft=getTooltipMarginLeft(day);
+				}
+				
+				if (this._initialized && (this._positionChanged || this._dayChanged || this._timeChanged)) {
+					this.draw();
+				}
+			},
+			
+			onAdd: function() {
+				
+				this._centerX = this._centerY = this.RADIUS + this.PADDING;
+				this._width = this._centerX * 2;
+				this._height = this._centerY * 2;
+				
+				this._container = document.createElement('div');
+				this._container.style.position = 'absolute';
+				
+				this._paper = Raphael(this._container, this._width, this._height);
+				
+				//background circle
+				this._circle = this._paper.circle(this._centerX, this._centerY, this.RADIUS);
+				this._circle.attr(this._genPathAttrs(this.CIRCLE_ATTRS));
+							
+				//sunlight area
+				this._sunlightFill = this._paper.path().attr(this._genFillAttrs(this.SUNLIGHT_FILL_ATTRS));
+				
+				//June 21
+				this._jun21Curve = this._paper.path().attr(this._genPathAttrs(this.GREY_PATH_ATTRS));
+				
+				//December 21
+				this._dec21Curve = this._paper.path().attr(this._genPathAttrs(this.GREY_PATH_ATTRS));
+				
+				//sunset/sunrise intervals
+				this._sunriseSector = this._paper.path().attr(this._genFillAttrs(this.SUNRISE_SECTOR_ATTRS)).hide();
+				this._sunsetSector = this._paper.path().attr(this._genFillAttrs(this.SUNSET_SECTOR_ATTRS)).hide();
+				
+				//current day
+				this._sunriseDir = this._paper.path().attr(this._genPathAttrs(this.SUNRISE_DIR_ATTRS));
+				this._sunriseDir.attr({'stroke-dasharray': "-.."});
+				this._sunsetDir = this._paper.path().attr(this._genPathAttrs(this.SUNSET_DIR_ATTRS));
+				this._sunsetDir.attr({'stroke-dasharray': "-.."});
+				this._sunDir = this._paper.path().attr(this._genPathAttrs(this.SUN_DIR_ATTRS));
+				this._moonDir = this._paper.path().attr(this._genPathAttrs(this.MOON_DIR_ATTRS));
+				this._moonriseDir = this._paper.path().attr(this._genPathAttrs(this.MOONRISE_DIR_ATTRS));
+				this._moonriseDir.attr({'stroke-dasharray': "-.."});
+				this._moonsetDir = this._paper.path().attr(this._genPathAttrs(this.MOONSET_DIR_ATTRS));
+				this._moonsetDir.attr({'stroke-dasharray': "-.."});
+				this._currentCurve = this._paper.path().attr(this._genPathAttrs(this.CURRENT_CURVE_ATTRS));
+				this._currentMoonCurve = this._paper.path().attr(this._genPathAttrs(this.CURRENT_MOON_CURVE_ATTRS));
+				
+				
+				//khai bao cac icon
+				this._sunIcon = this._paper.image("mt_sunrise.png");
+				this._sunIcon.attr('height',30);
+				this._sunIcon.attr('width',30);
+				
+				this._moonIcon = this._paper.image("mt_moonrise.png");
+				this._moonIcon.attr('height',30);
+				this._moonIcon.attr('width',30);
+				
+				this._sunriseIcon = this._paper.image("mt_sunrise_up.png");
+				this._sunriseIcon.attr('height',30);
+				this._sunriseIcon.attr('width',30);
+				
+				this._moonriseIcon = this._paper.image("mt_moonrise_up.png");
+				this._moonriseIcon.attr('height',30);
+				this._moonriseIcon.attr('width',30);
+				
+				this._sunsetIcon = this._paper.image("mt_sunset_down.png");
+				this._sunsetIcon.attr('height',30);
+				this._sunsetIcon.attr('width',30);
+				
+				this._moonsetIcon = this._paper.image("mt_moonset_down.png");
+				this._moonsetIcon.attr('height',30);
+				this._moonsetIcon.attr('width',30);
+				
+				function bind(fn, obj) {
+					return function() {
+						return fn.apply(obj, arguments);
+					}
+				}
+				
+				this._sunriseDir.hover(bind(this._sunriseSector.show, this._sunriseSector), bind(this._sunriseSector.hide, this._sunriseSector));
+				this._sunsetDir.hover(bind(this._sunsetSector.show, this._sunsetSector), bind(this._sunsetSector.hide, this._sunsetSector));
+				
+				//this.getPanes().overlayLayer.appendChild(this._container);
+				this._initialized = true;
+			},
+			
+			draw: function() {
+				var projection = this.getProjection();
+				var pos = projection.fromLatLngToDivPixel(this._position);
+				this._container.style.left = (pos.x - this._centerX) + 'px';
+				this._container.style.top = (pos.y - this._centerY) + 'px';
+				
+				if (this._positionChanged) {
+					//this._drawYearInfo();
+					this._drawCurrentDayInfo();
+					this._drawCurrentTimeInfo();
+				} else if (this._dayChanged) {
+					this._drawCurrentDayInfo();
+					this._drawCurrentTimeInfo();
+				} else if (this._timeChanged) {
+					this._drawCurrentTimeInfo();
+				}
+				this._positionChanged = this._dayChanged = this._timeChanged = false;
+			},
+			
+			onHide: function() {
+				this.getPanes().overlayLayer.removeChild(this._container);
+			},
+
+			onShow:function()
+			{
+				this.getPanes().overlayLayer.appendChild(this._container);
+			},
+			
+			_drawYearInfo: function() {
+				var jun21 = this._getLongestDay(),
+					jun21di = this._getDayInfo(jun21),
+					jun21CurvePath = this._getCurvePathStr(jun21di, jun21);
+					
+				this._jun21Curve.attr('path', jun21CurvePath);
+				
+				var dec21 = this._getShortestDay(),
+					dec21di = this._getDayInfo(dec21),
+					dec21CurvePath = this._getCurvePathStr(dec21di, dec21);
+					
+				this._dec21Curve.attr('path', dec21CurvePath);
+				
+				var sunriseSectorPath = this._getSectorPathStr(jun21di.sunrise.start, dec21di.sunrise.start);
+				
+				var sunlightFillPath = sunriseSectorPath ? this._getSunlightFillPath(jun21CurvePath, dec21CurvePath) : '';
+				this._sunlightFill.attr('path', sunlightFillPath);
+				
+				this._sunriseSector.attr('path', sunriseSectorPath);
+				this._sunsetSector.attr('path', this._getSectorPathStr(dec21di.sunset.end, jun21di.sunset.end));
+			},
+			
+			_drawCurrentDayInfo: function() {
+				var di = this._getDayInfo(this._date);
+				
+				this._sunriseDir.attr('path', this._getPosPathStr(di.sunrise.start));
+				var sunrisePos = this._getSunPosPoint(di.sunrise.start);	
+				this._sunriseIcon.attr('x', sunrisePos.x-30);
+				this._sunriseIcon.attr('y', sunrisePos.y-32);
+				
+				this._sunsetDir.attr('path', this._getPosPathStr(di.sunset.end));
+				var sunsetPos = this._getSunPosPoint(di.sunset.end);	
+				this._sunsetIcon.attr('x', sunsetPos.x-30);
+				this._sunsetIcon.attr('y', sunsetPos.y-32);
+				
+				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
+				
+				this._moonriseDir.attr('path', this._getMoonPosPathStr(moonTimes[0]));
+				var moonrisePos = this._getMoonPosPoint(moonTimes[0]);	
+				this._moonriseIcon.attr('x', moonrisePos.x-30);
+				this._moonriseIcon.attr('y', moonrisePos.y-32);
+				
+				this._moonsetDir.attr('path', this._getMoonPosPathStr(moonTimes[1]));
+				var moonsetPos = this._getMoonPosPoint(moonTimes[1]);	
+				this._moonsetIcon.attr('x', moonsetPos.x-30);
+				this._moonsetIcon.attr('y', moonsetPos.y-32);
+				
+				this._currentCurve.attr('path', this._getCurvePathStr(di, this._date));
+				this._currentMoonCurve.attr('path', this._getMoonCurvePathStr(moonTimes, this._date));
+				
+				var tooltip = '<div class="tooltip"><div class="tooltip-inner" style="text-align:center"><table style="width:100%">'
+								+'<tr><td colspan="2" style="text-align:center">'+ this._date.getDate() + '/'+ (this._date.getMonth()+1) +'/'+ this._date.getFullYear() +' - '+ this._date.getHours() +':'+ this._date.getMinutes() +':'+ this._date.getSeconds()+'</td></tr>'
+								+'<tr><td>Sunrise: '+di.sunrise.start.getHours()+':'+di.sunrise.start.getMinutes()+'</td><td>Moonrise: '+moonTimes[0].getHours()+':'+moonTimes[0].getMinutes()+'</td></tr>'
+								+'<tr><td>Sunset: '+di.sunset.end.getHours()+':'+di.sunset.end.getMinutes()+'</td><td>Moonset: '+moonTimes[1].getHours()+':'+moonTimes[1].getMinutes()+'</td></tr>'
+								+'</table><input type="button" value="Current" id="moonButton" onClick="currentBtn()"></input></div><div class="tooltip-arrow"></div></div>';
+				
+				$('#dateSlider .ui-slider-handle').html(tooltip);	
+				//change tooltip margin-left
+				$('.tooltip').css("margin-left",tooltipMarginLeft+"%");
+			},
+			
+			_drawCurrentTimeInfo: function() {
+				this._sunDir.attr('path', this._getPosPathStr(this._date));
+				var di = this._getDayInfo(this._date);
+				if ((this._date>=di.sunrise.start)&&(this._date<=di.sunset.end)){
+					this._sunIcon.show();
+					var sunPos = this._getSunPosPoint(this._date);	
+					this._sunIcon.attr('x', sunPos.x-30);
+					this._sunIcon.attr('y', sunPos.y-32);
+				}
+				else{
+					this._sunIcon.hide();
+				}
+
+				
+				this._moonDir.attr('path', this._getMoonPosPathStr(this._date));
+				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
+				if ((this._date>=moonTimes[0])&&(this._date<=moonTimes[1])){
+					this._moonIcon.show();
+					var moonPos = this._getMoonPosPoint(this._date);	
+					this._moonIcon.attr('x', moonPos.x-30);
+					this._moonIcon.attr('y', moonPos.y-32);
+				}
+				else{
+					this._moonIcon.hide();
+				}
+				
+			},
+			
+			_getSunlightFillPath: function(jun21CurvePath, dec21CurvePath) {
+				if (!jun21CurvePath || !dec21CurvePath) { return ''; }
+			
+				var r = this.RADIUS,
+					path = dec21CurvePath.concat(['A', r, r, 0, 0, 1]);
+				
+				for (var start = jun21CurvePath.length - 3, i = start; i >= 0; i-= 3) {
+					if (i != start) {
+						path.push('L');
+					}
+					path.push(jun21CurvePath[i+1]);
+					path.push(jun21CurvePath[i+2]);
+				}
+				
+				path = path.concat(['A', r, r, 0, 0, 1, path[1], path[2]]);
+				return path;
+			},
+			
+			_getSectorPathStr: function(date1, date2) {
+				var p1 = this._getSunPosPoint(date1),
+					p2 = this._getSunPosPoint(date2),
+					r = this.RADIUS;
+				if (isNaN(p1.x) || isNaN(p2.x)) { return ''; }
+					
+				return ['M', this._centerX, this._centerY, 'L', p1.x, p1.y, 'A', r, r, 0, 0, 1, p2.x, p2.y, 'z'];
+			},
+			
+			_getPosPathStr: function(date) {
+				
+				var di = this._getDayInfo(this._date);
+				if ((date>=di.sunrise.start)&&(date<=di.sunset.end)){
+					var posPoint = this._getSunPosPoint(date);	
+					return ['M', this._centerX, this._centerY, 'L', posPoint.x, posPoint.y];
+				}
+				else
+					return '';
+			},
+			
+			_getCurvePathStr: function(di, date) {
+				var dates = [];
+				
+				var start = isNaN(di.sunrise.start) ? date : di.sunrise.start,
+					end = isNaN(di.sunset.end) ? new Date(date).setDate(date.getDate() + 1) : di.sunset.end;
+				
+				var date = new Date(start);
+				while (date < end) {
+					dates.push(new Date(date));
+					date.setTime(date.valueOf() + this.CURVE_TIME_INTERVAL);
+				}
+				
+				dates.push(end);
+
+				var path = [],
+					belowHorizon = true;
+				for (var i = 0, len = dates.length; i < len; i++) {
+					var posPoint = this._getSunPosPoint(dates[i]);
+					belowHorizon = belowHorizon && (posPoint.altitude < 0);
+					path.push(!i ? 'M' : 'L');
+					path.push(posPoint.x);
+					path.push(posPoint.y);
+				}
+				if (belowHorizon) { return ''; }
+				return path;
+			},
+
+			_getMoonPosPathStr: function(date) {
+				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
+				if ((date>=moonTimes[0])&&(date<=moonTimes[1])){
+					var posPoint = this._getMoonPosPoint(date);			
+					return ['M', this._centerX, this._centerY, 'L', posPoint.x, posPoint.y];
+				}
+				else
+					return '';
+				
+			},
+
+			_getMoonCurvePathStr: function(moonTimes, date) {
+				var dates = [];
+				
+				var start = moonTimes[0],
+					end = moonTimes[1];
+				
+				var date = new Date(start);
+				while (date < end) {
+					dates.push(new Date(date));
+					date.setTime(date.valueOf() + this.CURVE_TIME_INTERVAL);
+				}
+				
+				dates.push(end);
+
+				var path = [],
+					belowHorizon = true;
+				for (var i = 0, len = dates.length; i < len; i++) {
+					var posPoint = this._getMoonPosPoint(dates[i]);
+					belowHorizon = belowHorizon && (posPoint.altitude < 0);
+					path.push(!i ? 'M' : 'L');
+					path.push(posPoint.x);
+					path.push(posPoint.y);
+				}
+				if (belowHorizon) { return ''; }
+				return path;
+			},
+			
+			_getDayInfo: function(date) {
+				return SunCalc.getDayInfo(date, this._position.lat(), this._position.lng(),true);
+			},
+			
+			_getSunPosPoint: function(date) {
+				var pos = SunCalc.getSunPosition(date, this._position.lat(), this._position.lng()),
+					angle = Math.PI/2 + pos.azimuth;
+				return {
+					x: this._centerX + this.RADIUS * Math.cos(angle) * Math.cos(pos.altitude),
+					y: this._centerY + this.RADIUS * Math.sin(angle) * Math.cos(pos.altitude),
+					altitude: pos.altitude
+				};
+			},
+			
+			_getMoonPosPoint: function(date) {
+				var pos = MoonCalc.getMoonPosition(date, this._position.lat(), this._position.lng()),
+					angle = Math.PI/2 + pos.azimuth;
+				return {
+					x: this._centerX + this.RADIUS * Math.cos(angle) * Math.cos(pos.altitude),
+					y: this._centerY + this.RADIUS * Math.sin(angle) * Math.cos(pos.altitude),
+					altitude: pos.altitude,
+					azimuth: pos.azimuth
+				};
+			},
+			
+			_getShortestDay: function() {
+				var date = new Date(this._date);
+				date.setMonth(11);
+				date.setDate(21);
+				return date;
+			},
+			
+			_getLongestDay: function() {
+				var date = new Date(this._date);
+				date.setMonth(5);
+				date.setDate(21);
+				return date;
+			},
+			
+			_genPathAttrs: function(arr) {
+				return {
+					'stroke': arr[0], 
+					'stroke-opacity': arr[1],
+					'stroke-width': arr[2]
+				};
+			},
+			
+			_genFillAttrs: function(arr) {
+				return {
+					'fill': arr[0], 
+					'fill-opacity': arr[1],
+					'stroke': 'none'
+				};
+			}
+		});
+		//Hien thi thong tin mat trang mat troi
+		sunInfoOverlay = new SuncalcOverlay(map, map.getCenter(), new Date());
+      }
+
+      function showMapTool()
+      {
+      		$('#showMapToolBtn').hide();
+      		$('#hideMapToolBtn').show();
+      		$('#toggleMapTool').show("up");
+      		$('#dateTimeSlider').show();
+      		sunInfoOverlay.onShow();
+      		takePhotoLine.setVisible(true);
+      		takePhotoPos.setVisible(true);
+
+      		//var oShell = new ActiveXObject("Shell.Application");
+
+		    // var commandtoRun = "C:\\Winnt\\Notepad.exe";
+		    // if (inputparms != "") {
+		    //   var commandParms = document.Form1.filename.value;
+		    // }
+		    // oShell.ShellExecute(commandtoRun, commandParms, "", "open", "1");
+      }
+      function hideMapTool()
+      {
+      		$('#showMapToolBtn').show();
+      		$('#hideMapToolBtn').hide();
+      		$('#toggleMapTool').hide("up");
+      		$('#dateTimeSlider').hide();
+      		sunInfoOverlay.onHide();
+      		takePhotoLine.setVisible(false);
+      		takePhotoPos.setVisible(false);
+      }
+
+      function currentBtn()
+      {		
+			current = new Date();
+ 
+			//thay doi vi tri con tro cho dateslider
+           	day = getDateSliderPos(current);
+           	$("#dateSlider").slider("option", "value", day);
+			
+           	//thay doi vi tri con tro cho timeslider
+           	time = getTimeSliderPos(current);
+           	$("#timeSlider").slider("option", "value", time);
+			
+			////
+			if (!sunInfoOverlay) {
+				sunInfoOverlay = new SuncalcOverlay(map, marker.getPosition(), current);
+			} else {
+				sunInfoOverlay.update(marker.getPosition(), current);
+			}	
+      }
+
+      google.maps.event.addDomListener(window, 'load', initialize);
+    </script>
+	<script>
+	//scipt du bao thoi tiet 5 ngay lien tiep
+	function getWeatherForecast()
+	{	
+		 document.getElementById('dialog').style.display = "";
+		jQuery(document).ready(function($) {
+		  $.ajax({
+		  url : "http://api.wunderground.com/api/8a429325ee2fe317/forecast10day/geolookup/q/"+map.getCenter().lat()+","+map.getCenter().lng()+".json",
+		  dataType : "jsonp",
+		  success : function(parsed_json) {
+			var forecast = parsed_json['forecast']['simpleforecast']['forecastday'];
+			var city = parsed_json['location']['city'];
+			var country = parsed_json['location']['country_name'];
+			var html="";
+			  for(i=0; i<5; i++)
+			  {
+				//console.log("weather forecast"+forecast[i].date.pretty);
+				html=html+"<tr><td colspan=\"2\" style=\"text-align:center; background-color: rgb(202, 202, 202);\"><b>"+forecast[i].date.day+"/"+forecast[i].date.month+"/"+forecast[i].date.year+
+					"</b></tr><tr><td style=\"text-align:center\"><img src=\"http://icons.wxug.com/i/c/g/"+forecast[i].icon+".gif\"  height=\"50\" width=\"50\"><br/>"+forecast[i].conditions+
+					"</td><td>Lowest temperature: <b>"+forecast[i].low.celsius+"&degC</b><br/> Highest temperature: <b>"+forecast[i].high.celsius+"&degC</b></td></tr>";
+			  }
+			   $( "#forecastHeader" ).html("<center><b>WEATHER FORECAST<br/> Location: "+city+", "+country+".</b></center>");
+			  $( "#forecast" ).html("<table style=\"width:100%\">"+html+"<td colspan=\"2\" style=\"text-align:center; background-color: rgb(202, 202, 202);\"></td></table>");
+		  }
+		  });
+		});
+		
+	}
+	function closeDialog()
+	{
+		document.getElementById('dialog').style.display = 'none';
+	}
+	</script>
+	<script>
+		//date slider
+		var current= new Date();
+		var dayNumber=365;
+		var dateOfMonth;
+		var tooltipMarginLeft;
+		
+		//get slide position
+		//ham lay vi tri con tro cua dateslider 
+		function getDateSliderPos(current)
+		{
+			var day=0;
+			var date=current.getDate();
+			var month = current.getMonth();
+			if ((current.getFullYear()%4)==0) 
+			{
+				//nam nhuan
+				dateOfMonth=[31,29,31,30,31,30,31,31,30,31,30,31];	
+			}
+			else{
+				dateOfMonth=[31,28,31,30,31,30,31,31,30,31,30,31];	
+			}
+			for (var i=0; i<month;i++)
+			{
+				day=day+dateOfMonth[i];
+			}
+			day=day+date;
+			return day;
+
+		}
+		//ham lay vi tri con tro cho timeslider
+		function getTimeSliderPos(current)
+		{
+			var time=0;
+			var hour=current.getHours();
+			var minute = current.getMinutes();
+			time=hour*60+minute;
+			return time;
+
+		}
+
+		//get slide positon for current 
+		var day= getDateSliderPos(current);
+
+		var time = getTimeSliderPos(current);
+		
+		//slider
+		$(function() {
+			$( "#dateSlider" ).slider({
+				value:day,
+				min: 1,
+				max: dayNumber,
+				step: 1,
+				slide: function( event, ui ) {
+					console.log(ui.value);
+					//kiem tra nam thuong/nam nhuan
+					if(current.getFullYear()%4==0)
+					{
+						//nam nhuan
+						$("#dateSlider").slider("option", "max", 366);
+						dateOfMonth =[31,29,31,30,31,30,31,31,30,31,30,31];
+					}
+					else
+					{
+						//nam thuong
+						$("#dateSlider").slider("option", "max", 365);
+						dateOfMonth =[31,28,31,30,31,30,31,31,30,31,30,31];
+					}
+
+					//hien thi dateslider
+					var day =ui.value;
+					var month=0;
+
+					//tinh gia tri ngay thang tu dateslider
+					while((day-dateOfMonth[month]>0))
+					{
+						day=day-dateOfMonth[month];
+						month++;	
+					}
+					
+					//thay doi gia tri ngay/thang cho bien current
+					current.setDate(day);
+					current.setMonth(month);					
+					
+					//gan gia tri tu current vao current2 de ve thay doi
+					var current2=new Date();	
+					current2.setHours(current.getHours());
+					current2.setMinutes(current.getMinutes());
+					current2.setFullYear(current.getFullYear());
+					current2.setMonth(current.getMonth());
+					current2.setDate(current.getDate());
+					console.log(current2);
+					if (!sunInfoOverlay) {
+						sunInfoOverlay = new SuncalcOverlay(map, marker.getPosition(), current2);
+					} else {
+						sunInfoOverlay.update(marker.getPosition(), current2);
+					}		
+				}
+			});
+		});
+		
+		//time slider
+		  $(function() {
+			$( "#timeSlider" ).slider({
+				value:time,
+				min: 0,
+				max: 1439,
+				step: 1,
+				slide: function( event, ui ) {
+					//lay gia tri thoi gian tu timeslider
+					var hour =  parseInt(ui.value/60);
+					var minute = ui.value%60;
+					
+					//cap nhat gia tri thoi gian vao bien current
+					current.setHours(hour);
+					current.setMinutes(minute);			
+					
+					//gan gia tri tu current vao current2 de ve thay doi	
+					var current2 = new Date();				
+					current2.setHours(current.getHours());
+					current2.setMinutes(current.getMinutes());
+					current2.setFullYear(current.getFullYear());
+					current2.setMonth(current.getMonth());
+					current2.setDate(current.getDate());
+					console.log(current2);
+					if (!sunInfoOverlay) {
+						sunInfoOverlay = new SuncalcOverlay(map, marker.getPosition(), current2);
+					} 
+					else {
+						sunInfoOverlay.update(marker.getPosition(),current2);
+					}	
+				}
+			});
+		  });
+		  
+		//change tooltip margin-left base on dateslider position
+		function getTooltipMarginLeft( dateSliderValue){
+			return -dateSliderValue*3.2;
+		}
+  </script>
+  <script>
+  //Scrip cho datepiker
+  $(function() {
+    $( "#datepicker" ).datepicker({
+      showOn: "button",
+      buttonImage: "http://www.cityofpsl.com/pics/calendar-icon.png",
+      buttonImageOnly: true,
+	  dateFormat: 'M d yy',
+	  onClose: function() { 
+						
+	  		//lay gia tri ngay tu datepicker
+	  		var date = $("#datepicker").datepicker('getDate').getDate();
+            var month = $("#datepicker").datepicker('getDate').getMonth();
+            var year = $("#datepicker").datepicker('getDate').getFullYear();
+
+            //cap nhat gia tri cho currnet
+            current.setDate(date);
+            current.setMonth(month);
+            current.setFullYear(year);
+
+            //thay doi vi tri con tro cho dateslider
+           	day = getDateSliderPos(current);
+           	$("#dateSlider").slider("option", "value", day);
+			
+			//gan gia tri tu current vao current2 de ve thay doi
+			var current2=new Date();	
+			current2.setHours(current.getHours());
+			current2.setMinutes(current.getMinutes());
+			current2.setFullYear(current.getFullYear());
+			current2.setMonth(current.getMonth());
+			current2.setDate(current.getDate());
+			console.log(current2);
+
+			if (!sunInfoOverlay) {
+				sunInfoOverlay = new SuncalcOverlay(map, marker.getPosition(), current2);
+			} else {
+				sunInfoOverlay.update(marker.getPosition(), current2);
+			}	
+      }
+    });
+  });
+  </script>
+  <script>
+	//script for sun/moon position button
+	function sunriseButtonClick()
+	{
+		if(document.getElementById("sunriseButton").value=="Show"){
+			document.getElementById("sunriseButton").value="Hide";
+			sunInfoOverlay._sunriseDir.show();
+		}
+		else{
+			document.getElementById("sunriseButton").value="Show";
+			sunInfoOverlay._sunriseDir.hide();
+		}
+	}
+	function moonriseButtonClick()
+	{
+		if(document.getElementById("moonriseButton").value=="Show"){
+			document.getElementById("moonriseButton").value="Hide";
+			sunInfoOverlay._moonriseDir.show();
+		}
+		else{
+			document.getElementById("moonriseButton").value="Show";
+			sunInfoOverlay._moonriseDir.hide();
+		}
+	}
+	function sunsetButtonClick()
+	{
+		if(document.getElementById("sunsetButton").value=="Show"){
+			document.getElementById("sunsetButton").value="Hide";
+			sunInfoOverlay._sunsetDir.show();
+		}
+		else{
+			document.getElementById("sunsetButton").value="Show";
+			sunInfoOverlay._sunsetDir.hide();
+		}
+	}
+	function moonsetButtonClick()
+	{
+		if(document.getElementById("moonsetButton").value=="Show"){
+			document.getElementById("moonsetButton").value="Hide";
+			sunInfoOverlay._moonsetDir.show();
+		}
+		else{
+			document.getElementById("moonsetButton").value="Show";
+			sunInfoOverlay._moonsetDir.hide();
+		}
+	}
+	function sunButtonClick()
+	{
+		if(document.getElementById("sunButton").value=="Show"){
+			document.getElementById("sunButton").value="Hide";
+			sunInfoOverlay._sunDir.show();
+			sunInfoOverlay._currentCurve.show()
+		}
+		else{
+			document.getElementById("sunButton").value="Show";
+			sunInfoOverlay._sunDir.hide();
+			sunInfoOverlay._currentCurve.hide()
+		}
+	}
+	function moonButtonClick()
+	{
+		// html2canvas($('.tooltip'), {
+		//   onrendered: function(canvas) {
+		//     //$('.tooltip').append(canvas);
+		//     Canvas2Image.saveAsJPEG(canvas,tre);
+		//   }
+		// });
+		if(document.getElementById("moonButton").value=="Show"){
+			document.getElementById("moonButton").value="Hide";
+			sunInfoOverlay._moonDir.show();
+			sunInfoOverlay._currentMoonCurve.show()
+			//sunInfoOverlay.onShow();
+		}
+		else{
+			document.getElementById("moonButton").value="Show";
+			sunInfoOverlay._moonDir.hide();
+			sunInfoOverlay._currentMoonCurve.hide()
+			//sunInfoOverlay.onHide();
+		}
+		
+	}
+	
+  </script>
+  </head>
+  <body>
+	
+	<!--Khung hien thi map-->
+    <div id="map-canvas"></div>
+	
+	<!-- Bat/tat cac duong -->
+	<div id="toggleMapTool"style=" position: fixed;right: 31px;top: 120px;z-index: 100;background-color:white;width: 240px;-moz-box-shadow: 10px 10px 5px #888;-webkit-box-shadow: 10px 10px 5px #888;box-shadow: 8px 7px 15px #888;border-radius: 8px; display:none">
+	<table >
+		<tr>
+			<td>
+			</td>
+			<td colspan="2" style="text-align:center">
+			Sun/Moon position
+			</td>
+			<td>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Sunrise:
+			</td>
+			<td>
+				<input type="button" value="Hide" id="sunriseButton" onClick="sunriseButtonClick()"></input>
+			</td>
+			<td>
+				Moonrise: 
+			</td>
+			<td>
+				<input type="button" value="Hide" id="moonriseButton" onClick="moonriseButtonClick()"></input>
+			</td>
+		<tr>
+		<tr>
+			<td>
+				Sunset: 
+			</td>
+			<td>
+				<input type="button" value="Hide" id="sunsetButton" onClick="sunsetButtonClick()"></input>
+			</td>
+			<td>
+				Moonset:
+			</td>
+			<td>
+				  <input type="button" value="Hide" id="moonsetButton" onClick="moonsetButtonClick()"></input>
+			</td>
+		</tr>
+		<tr>
+			<td colspan="4" style="text-align:center">
+			Sun/Moon realtime
+			</td>
+		</tr>
+		<tr>
+			<td>
+				Sun:
+			</td>
+			<td>
+				 <input type="button" value="Hide" id="sunButton" onClick="sunButtonClick()"></input>
+			</td>
+			<td>
+				Moon:
+			</td>
+			<td>
+				 <input type="button" value="Hide" id="moonButton" onClick="moonButtonClick()"></input>
+			</td>
+		<tr>
+	</table>
+	</div>
+
+    <!--hien thi thanh truot chon ngay/gio-->
+	<table id="dateTimeSlider" style="height:5%; width:100%; display:none">
+		<tr>
+			<td rowspan="2" style="text-align:center; width:5%"><input type="hidden" id="datepicker"/></td>
+			<td style="width:90%"><div id="dateSlider" style="width:98%;top:5px" ></div></td>
+		</tr>
+		<tr>
+			<td style="width:90%"><div id="timeSlider" style="width:98%;top:5px" ></div></td>
+		</tr>
+	</table>
+	
+	<!--bat tat map tool-->
+	<input id="showMapToolBtn" 
+		type="image" 
+		src="./open.png" 
+		name="image" 
+		width="30" 
+		height="30" 
+		style=" position: fixed;right: 17px;top: 110px;z-index: 100;" onclick="showMapTool()">
+	<input id="hideMapToolBtn" 
+		type="image" 
+		src="./close.png" 
+		name="image" 
+		width="30" 
+		height="30" 
+		style=" position: fixed;right: 17px;top: 110px;z-index: 100;display:none" onclick="hideMapTool()">
+	
+	<!--Du bao thoi tiet 5 ngay-->
+	<input id="weaterbtn" 
+		type="image" 
+		src="http://t1.gstatic.com/images?q=tbn:ANd9GcRnxhcwcu1d7lGNbiMf9WqyNvFxrPevd2HxKpS3Lk8T1gnJsBvyGQ" 
+		name="image" 
+		width="60" 
+		height="60" 
+		style=" position: fixed;right: 31px;top: 40px;z-index: 100;" onclick="getWeatherForecast()">
+	
+	<!--Hien thi ket qua du bao thoi tiet-->
+	<div id="dialog"  style="display:none;position:fixed;top: 0px;z-index: 200;width:100%;height:100%;background-color: rgba(0, 0, 0, 0.6)" onclick="closeDialog()">
+		<div style="width:40%; height:75%;background-color: white;margin: 80px auto; border-radius: 10px" >
+			<input type="image" src="http://www.veryicon.com/icon/png/System/Sleek%20XP%20Basic/Close%202.png" alt="Submit button" width="30" height="30" style="left: 450px;
+position: relative;" onclick="closeDialog()">
+			<div id="forecastHeader" style="text-align:center"></div>
+			<div id="forecast" style="height:73%; overflow:auto;"></div>
+		</div>
+	</div>
+	
+ </body>
+</html>
