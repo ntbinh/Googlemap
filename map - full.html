@@ -311,28 +311,46 @@
 				
 				this._sunriseDir.attr('path', this._getPosPathStr(di.sunrise.start));
 				var sunrisePos = this._getSunPosPoint(di.sunrise.start);	
-				this._sunriseIcon.attr('x', sunrisePos.x-30);
-				this._sunriseIcon.attr('y', sunrisePos.y-32);
+				this._sunriseIcon.attr('x', sunrisePos.x-15);
+				this._sunriseIcon.attr('y', sunrisePos.y-15);
 				
 				this._sunsetDir.attr('path', this._getPosPathStr(di.sunset.end));
 				var sunsetPos = this._getSunPosPoint(di.sunset.end);	
-				this._sunsetIcon.attr('x', sunsetPos.x-30);
-				this._sunsetIcon.attr('y', sunsetPos.y-32);
+				this._sunsetIcon.attr('x', sunsetPos.x-15);
+				this._sunsetIcon.attr('y', sunsetPos.y-15);
 				
 				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
 				
 				this._moonriseDir.attr('path', this._getMoonPosPathStr(moonTimes[0]));
 				var moonrisePos = this._getMoonPosPoint(moonTimes[0]);	
-				this._moonriseIcon.attr('x', moonrisePos.x-30);
-				this._moonriseIcon.attr('y', moonrisePos.y-32);
+				this._moonriseIcon.attr('x', moonrisePos.x-15);
+				this._moonriseIcon.attr('y', moonrisePos.y-15);
 				
-				this._moonsetDir.attr('path', this._getMoonPosPathStr(moonTimes[1]));
-				var moonsetPos = this._getMoonPosPoint(moonTimes[1]);	
-				this._moonsetIcon.attr('x', moonsetPos.x-30);
-				this._moonsetIcon.attr('y', moonsetPos.y-32);
+
+				var tmp = new Date();	
+					tmp.setHours(this._date.getHours());
+					tmp.setMinutes(this._date.getMinutes());
+					tmp.setFullYear(this._date.getFullYear());
+					tmp.setMonth(this._date.getMonth());
+					tmp.setDate(this._date.getDate()-1);
+				var moonTimesDayBefore = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),tmp);
+				if(moonTimesDayBefore[2])
+				{
+					this._moonsetDir.attr('path', this._getMoonPosPathStr(moonTimesDayBefore[1]));
+					var moonsetPos = this._getMoonPosPoint(moonTimesDayBefore[1]);	
+				}
+				else
+				{
+					this._moonsetDir.attr('path', this._getMoonPosPathStr(moonTimes[1]));
+					var moonsetPos = this._getMoonPosPoint(moonTimes[1]);	
+					
+				}
+				this._moonsetIcon.attr('x', moonsetPos.x-15);
+				this._moonsetIcon.attr('y', moonsetPos.y-15);
 				
-				this._currentCurve.attr('path', this._getCurvePathStr(di, this._date));
-				this._currentMoonCurve.attr('path', this._getMoonCurvePathStr(moonTimes, this._date));
+				
+				//this._currentCurve.attr('path', this._getCurvePathStr(di, this._date));
+				//this._currentMoonCurve.attr('path', this._getMoonCurvePathStr(moonTimes, this._date));
 				
 				var tooltip = '<div class="tooltip"><div class="tooltip-inner" style="text-align:center"><table style="width:100%">'
 								+'<tr><td colspan="2" style="text-align:center">'+ this._date.getDate() + '/'+ (this._date.getMonth()+1) +'/'+ this._date.getFullYear() +' - '+ this._date.getHours() +':'+ this._date.getMinutes() +':'+ this._date.getSeconds()+'</td></tr>'
@@ -351,21 +369,29 @@
 				if ((this._date>=di.sunrise.start)&&(this._date<=di.sunset.end)){
 					this._sunIcon.show();
 					var sunPos = this._getSunPosPoint(this._date);	
-					this._sunIcon.attr('x', sunPos.x-30);
-					this._sunIcon.attr('y', sunPos.y-32);
+					this._sunIcon.attr('x', sunPos.x-15);
+					this._sunIcon.attr('y', sunPos.y-15);
 				}
 				else{
 					this._sunIcon.hide();
 				}
 
-				
+				//get moonsettime of date before
+				var tmp = new Date();	
+					tmp.setHours(this._date.getHours());
+					tmp.setMinutes(this._date.getMinutes());
+					tmp.setFullYear(this._date.getFullYear());
+					tmp.setMonth(this._date.getMonth());
+					tmp.setDate(this._date.getDate()-1);
+				var moonTimesDayBefore = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),tmp);
+
 				this._moonDir.attr('path', this._getMoonPosPathStr(this._date));
 				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
-				if ((this._date>=moonTimes[0])&&(this._date<=moonTimes[1])){
+				if ((this._date>=moonTimes[0])&&(this._date<=moonTimes[1])||(this._date<=moonTimesDayBefore[1])){
 					this._moonIcon.show();
 					var moonPos = this._getMoonPosPoint(this._date);	
-					this._moonIcon.attr('x', moonPos.x-30);
-					this._moonIcon.attr('y', moonPos.y-32);
+					this._moonIcon.attr('x', moonPos.x-15);
+					this._moonIcon.attr('y', moonPos.y-15);
 				}
 				else{
 					this._moonIcon.hide();
@@ -440,7 +466,14 @@
 
 			_getMoonPosPathStr: function(date) {
 				var moonTimes = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),this._date);
-				if ((date>=moonTimes[0])&&(date<=moonTimes[1])){
+				var tmp = new Date();	
+					tmp.setHours(this._date.getHours());
+					tmp.setMinutes(this._date.getMinutes());
+					tmp.setFullYear(this._date.getFullYear());
+					tmp.setMonth(this._date.getMonth());
+					tmp.setDate(this._date.getDate()-1);
+				var moonTimesDayBefore = MoonCalc.getMoonTimes( this._position.lat(), this._position.lng(),tmp);
+				if ((date>=moonTimes[0])&&(date<=moonTimes[1])||(date<=moonTimesDayBefore[1])){
 					var posPoint = this._getMoonPosPoint(date);			
 					return ['M', this._centerX, this._centerY, 'L', posPoint.x, posPoint.y];
 				}
@@ -863,13 +896,13 @@
 		if(document.getElementById("moonButton").value=="Show"){
 			document.getElementById("moonButton").value="Hide";
 			sunInfoOverlay._moonDir.show();
-			sunInfoOverlay._currentMoonCurve.show()
+			//sunInfoOverlay._currentMoonCurve.show()
 			//sunInfoOverlay.onShow();
 		}
 		else{
 			document.getElementById("moonButton").value="Show";
 			sunInfoOverlay._moonDir.hide();
-			sunInfoOverlay._currentMoonCurve.hide()
+			//sunInfoOverlay._currentMoonCurve.hide()
 			//sunInfoOverlay.onHide();
 		}
 		

@@ -502,21 +502,20 @@
 	    // return results
 	    var moonsetTime;
 	    var moonriseTime;
+	    var nextDay =false;
 	    if (zintstr( Set_time[0], 2)<zintstr(Rise_time[0], 2))
 	    {
 	    	moonsetTime = new Date(date.getFullYear(), date.getMonth(), date.getDate()+1,zintstr( Set_time[0], 2), zintstr( Set_time[1], 2));
 	    	moonriseTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), zintstr(Rise_time[0], 2), zintstr(Rise_time[1], 2));
+	    	nextDay=true;
 	    }
 	    else{
 	    	moonsetTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(),zintstr( Set_time[0], 2), zintstr( Set_time[1], 2));
 	    	moonriseTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), zintstr(Rise_time[0], 2), zintstr(Rise_time[1], 2));
+	    	nextDay=false;
 	    }
 	    
-	    
-	    var moonsetAzimuth = frealstr(Rise_az, 5, 1)
-	    var moonriseAzimuth =frealstr(Set_az, 5, 1)
-
-	    var moonTimes=[moonriseTime,moonsetTime,moonriseAzimuth,moonsetAzimuth];
+	    var moonTimes=[moonriseTime,moonsetTime,nextDay];
 	    return moonTimes;
 	}
 
