@@ -370,10 +370,14 @@
 					var sunPos = this._getSunPosPoint(this._date);	
 					this._sunIcon.attr('x', sunPos.x-15);
 					this._sunIcon.attr('y', sunPos.y-15);
+					this._sunIcon.attr('height',30);
+					this._sunIcon.attr('width',30);
 				}
 				else{
 					this._sunIcon.attr('x', '');
 					this._sunIcon.attr('y', '');
+					this._sunIcon.attr('height','');
+					this._sunIcon.attr('width','');
 				}
 
 				//get moonsettime of date before
@@ -391,10 +395,14 @@
 					var moonPos = this._getMoonPosPoint(this._date);	
 					this._moonIcon.attr('x', moonPos.x-15);
 					this._moonIcon.attr('y', moonPos.y-15);
+					this._moonIcon.attr('height',30);
+					this._moonIcon.attr('width',30);
 				}
 				else{
 					this._moonIcon.attr('x', '');
 					this._moonIcon.attr('y', '');
+					this._moonIcon.attr('height','');
+					this._moonIcon.attr('width','');
 				}
 				
 			},
